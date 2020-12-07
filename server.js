@@ -2,22 +2,23 @@ let { prompt } = require('inquirer');
 let mysql = require('mysql2/promise');
 const util = require('util');
 
-let departments = [];
-let employees = [];
-let roles = [];
+let connection;
 
-const connection = mysql.createConnection({
-    host: "localhost",
-    port: 3306,
-    user: 'root',
-    password: '',
-    database: 'employee_db'
-});
-
+async function start() {
+    connection = await mysql.createConnection({
+        host: "localhost",
+        port: 3306,
+        user: 'root',
+        password: '',
+        database: 'employee_db'
+    });
+    manageEmployees();
+}
 // // node native promisify
 // const query = util.promisify(connection.query).bind(connection);
 
 async function manageEmployees() {
+
     let option = await prompt(optionQuestions);
 
     let cliOption = cliOptions[option.option];
@@ -77,43 +78,132 @@ let cliOptions = {
         execute: async (dep) => {
             console.log(dep);
             let result = await callQuery(department.createItem(dep));
+
+            manageEmployees();
             return result;
         }
     },
     "View Departments": {
         questions: [],
         execute: async () => {
-            let result = await callQuery(department.viewItems(manageEmployees));
+            let result = await callQuery(department.viewItems());
+            
+            console.log('\nDepartments')
+            for(i in result)
+                console.log(`Department ${(parseInt(i)+1)}: ${result[i].name}`);
+            
+            manageEmployees();
+
             return result;
-        }
+        },
     },
     "Update Department": {
         questions: [{
             message: "Which Department do you want to update?",
             type: 'rawlist',
-            name: 'departmentId',
+            name: 'department',
             choices: async () => {
-                await callQuery(department.viewItems());
-                return departments.map(dep => {return {name: dep.name, value: dep.id}})
+                let departments = await callQuery(department.viewItems());
+                return departments.map(dep => {return {name: dep.name, value: dep}})
             }
         }, 
         {
             message: "Department Name",
             type: 'input',
-            name: 'name'
+            name: 'name',
+            default: (answers) => answers.department.name
         }],
+        execute: async (dep) => {
+            let result = await callQuery(department.updateItem(dep.department.id, dep.name))
+            manageEmployees();
+            return result;
+        }
     },
     "Delete Department": {
-        questions: ["Which Department do you want to delete?"],
+        questions: [{
+            message: "Which Department do you want to delete?",
+            type: 'rawlist',
+            name: 'departmentId',
+            choices: async () => {
+                let departments = await callQuery(department.viewItems());
+                return departments.map(dep => {return {name: dep.name, value: dep.id}})
+            }
+        }],
+        execute: async (dep) => {
+            let result = await callQuery(department.deleteItem(dep.departmentId))
+            manageEmployees();
+            return result;
+        }
     },
     "Add Role": {
-        questions: ["Role Title", "Role Salary", "Which department is this role in?"],
+        questions: [{
+            message: "Role Title",
+            type: 'input',
+            name: 'name'
+        },
+        {
+            message: "Role Salary",
+            type: 'input',
+            name: 'name'
+        },
+        {
+            message: "Which department is this role in?",
+            type: 'rawlist',
+            name: 'department',
+            choices: async () => {
+                let departments = await callQuery(department.viewItems());
+                return departments.map(dep => {return {name: dep.name, value: dep}})
+            }
+        }],
+        execute: async (role) => {
+            console.log(role);
+            let result = await callQuery(role.createItem(role));
+
+            manageEmployees();
+            return result;
+        }
     },
     "View Roles": {
         questions: [],
     },
     "Update Role": {
         questions: ["Role Title", "Role Salary", "Which department should this role be in?"],
+        questions: [{
+            message: "Which Role do you want to update?",
+            type: 'rawlist',
+            name: 'role',
+            choices: async () => {
+                let roles = await callQuery(role.viewItems());
+                return roles.map(role => {return {name: role.name, value: role}})
+            }
+        },
+        {
+            message: "Role Title",
+            type: 'input',
+            name: 'title',
+            default: (answers) => answers.role.title
+        },
+        {
+            message: "Role Salary",
+            type: 'input',
+            name: 'salary',
+            default: (answers) => answers.role.salary
+        },
+        {
+            message: "Which department is this role in?",
+            type: 'rawlist',
+            name: 'departmentId',
+            choices: async () => {
+                let departments = await callQuery(department.viewItems());
+                return departments.map(dep => {return {name: dep.name, value: dep}})
+            },
+            default: (answers) => answers.role.departmentId
+        }],
+        execute: async (role) => {
+            let result = await callQuery(role.updateItem(role.role.id, role))
+            manageEmployees();
+            return result;
+        }
     },
     "Delete Role": {
         questions: ["Which role do you want to delete?"],
@@ -141,43 +231,89 @@ let cliOptions = {
 const department = {
     createItem(dept) {
         return [
-            "INSERT INTO department SET ?",
-            [dept],
-            function(err, res) {
-                if(err) throw err;
-                return manageEmployees();
-            }
+            "INSERT INTO department (name) VALUES (?)",
+            [dept.name]
         ]
+    },
+    viewItems() {
+        return ["SELECT * FROM department ORDER BY id ASC"];
     },
     updateItem(deptId, dept) {
         return [
-            "UPDATE department SET ? WHERE ?",
-            [dept, {id: deptId}],
+            "UPDATE department SET name = ? WHERE id = ?",
+            [dept, deptId],
             function(err, res) {
                 if(err) throw err;
                 return manageEmployees();
-            }
-        ]
-    },
-    viewItems(callback) {
-        return [
-            "SELECT * FROM department ORDER BY id ASC",
-            function(err, res) {
-                if(err) throw err;
-                console.log('\nDepartments')
-                for(i in res)
-                    console.log(`Department ${i}: ${res[i].name}`);
-                
-                departments = res;
-                
-                return res;
             }
         ]
     },
     deleteItem(deptId) {
         return [
-            "DELETE FROM department WHERE ?",
-            {id: deptId},
+            "DELETE FROM department WHERE id = ?",
+            [deptId],
+            function(err, res) {
+                if(err) throw err;
+                return manageEmployees();
+            }
+        ]
+    }
+}
+const role = {
+    createItem(role) {
+        return [
+            "INSERT INTO role (title, salary, department_id) VALUES (?)",
+            [role.title, role.salary, role.departmentId]
+        ]
+    },
+    viewItems() {
+        return ["SELECT * FROM role ORDER BY id ASC"];
+    },
+    updateItem(roleId, {title, salary, departmentId}) {
+        return [
+            "UPDATE role SET title = ?, salary = ?, department_id = ? WHERE id = ?",
+            [title, salary, departmentId, roleId],
+            function(err, res) {
+                if(err) throw err;
+                return manageEmployees();
+            }
+        ]
+    },
+    deleteItem(roleId) {
+        return [
+            "DELETE FROM role WHERE id = ?",
+            [roleId],
+            function(err, res) {
+                if(err) throw err;
+                return manageEmployees();
+            }
+        ]
+    }
+}
+const employee = {
+    createItem(dept) {
+        return [
+            "INSERT INTO department (name) VALUES (?)",
+            [dept.name]
+        ]
+    },
+    viewItems() {
+        return ["SELECT * FROM department ORDER BY id ASC"];
+    },
+    updateItem(deptId, dept) {
+        return [
+            "UPDATE department SET name = ? WHERE id = ?",
+            [dept, deptId],
+            function(err, res) {
+                if(err) throw err;
+                return manageEmployees();
+            }
+        ]
+    },
+    deleteItem(deptId) {
+        return [
+            "DELETE FROM department WHERE id = ?",
+            [deptId],
             function(err, res) {
                 if(err) throw err;
                 return manageEmployees();
@@ -187,12 +323,12 @@ const department = {
 }
 
 async function callQuery(queryObj) {
-    let queryResponse = await connection.execute(...queryObj);
-    console.log(queryResponse);
-    return queryResponse;
+    let [rows, fields] = await connection.execute(...queryObj);
+    return rows;
 }
 
-connection.connect(err => {
-    if(err) throw err;
-    manageEmployees();
-});
+start();
+// connection.connect(err => {
+//     if(err) throw err;
+//     manageEmployees();
+// });
