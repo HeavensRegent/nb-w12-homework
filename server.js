@@ -233,15 +233,121 @@ let cliOptions = {
     },
     "Add Employee": {
         questions: ["First Name", "Last Name", "What role do they have?", "Who is their manager?"],
+        questions: [{
+            message: "First Name",
+            type: 'input',
+            name: 'firstName'
+        },
+        {
+            message: "Last Name",
+            type: 'input',
+            name: 'lastName'
+        },
+        {
+            message: "What role do they have?",
+            type: 'rawlist',
+            name: 'roleId',
+            choices: async () => {
+                let roles = await callQuery(role.viewItems());
+                return roles.map(role => {return {name: role.title, value: role.id}})
+            }
+        },
+        {
+            message: "Who is their manager?",
+            type: 'rawlist',
+            name: 'managerId',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                employees.unshift({title: 'None', id: 0});
+                return employees.map(emp => {return {name: emp.title, value: emp.id}})
+            }
+        }],
+        execute: async (emp) => {
+            console.log(emp);
+            let result = await callQuery(employee.createItem(emp));
+
+            manageEmployees();
+            return result;
+        }
     },
     "View Employees": {
         questions: [],
+        execute: async () => {
+            let result = await callQuery(employee.viewItems());
+            
+            console.log('\nid\tFirst Name\tLast Name\tRole\tManager');
+            for(i in result)
+                console.log(`${result[i].id}\t${result[i].first_name}\t${result[i].last_name}\t${result[i].role_id}\t${result[i].manager_id}`);
+            
+            manageEmployees();
+
+            return result;
+        },
     },
     "Update Employees": {
-        questions: ["First name", "Last Name", "Role", "Manager"],
+        questions: [{
+            message: "Which Employee do you want to update?",
+            type: 'rawlist',
+            name: 'employee',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp}})
+            }
+        },
+        {
+            message: "First Name",
+            type: 'input',
+            name: 'firstName',
+            default: (answers) => answers.employee.first_name
+        },
+        {
+            message: "Last Name",
+            type: 'input',
+            name: 'lastName',
+            default: (answers) => answers.employee.last_name
+        },
+        {
+            message: "What role do they have?",
+            type: 'rawlist',
+            name: 'roleId',
+            choices: async () => {
+                let roles = await callQuery(role.viewItems());
+                return roles.map(role => {return {name: role.title, value: role.id}})
+            },
+            default: (answers) => answers.employee.role_id
+        },
+        {
+            message: "Who is their manager?",
+            type: 'rawlist',
+            name: 'managerId',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                employees.unshift({title: 'None', id: 0});
+                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp.id}})
+            },
+            default: (answers) => answers.employee.manager_id
+        }],
+        execute: async (emp) => {
+            let result = await callQuery(employee.updateItem(emp.employee.id, emp))
+            manageEmployees();
+            return result;
+        }
     },
     "Delete Employees": {
-        questions: ["Which employee do you want to delete?"],
+        questions: [{
+            message: "Which Employee do you want to delete?",
+            type: 'rawlist',
+            name: 'employeeId',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp.id}})
+            }
+        }],
+        execute: async (emp) => {
+            let result = await callQuery(employee.deleteItem(emp.employeeId))
+            manageEmployees();
+            return result;
+        }
     },
     "Exit": {
         questions: [],
@@ -314,29 +420,29 @@ const role = {
     }
 }
 const employee = {
-    createItem(dept) {
+    createItem(emp) {
         return [
-            "INSERT INTO department (name) VALUES (?)",
-            [dept.name]
+            "INSERT INTO employee (first_name, last_name, role_id, manager_id) VALUES (?, ?, ?, ?)",
+            [emp.firstName, emp.lastName, emp.roleId, emp.managerId]
         ]
     },
     viewItems() {
-        return ["SELECT * FROM department ORDER BY id ASC"];
+        return ["SELECT * FROM employee ORDER BY id ASC"];
     },
-    updateItem(deptId, dept) {
+    updateItem(empId, {firstName, lastName, roleId, managerId}) {
         return [
-            "UPDATE department SET name = ? WHERE id = ?",
-            [dept, deptId],
+            "UPDATE employee SET first_name = ?, last_name = ?, role_id = ?, manager_id = ? WHERE id = ?",
+            [firstName, lastName, roleId, managerId, empId],
             function(err, res) {
                 if(err) throw err;
                 return manageEmployees();
             }
         ]
     },
-    deleteItem(deptId) {
+    deleteItem(empId) {
         return [
-            "DELETE FROM department WHERE id = ?",
-            [deptId],
+            "DELETE FROM employee WHERE id = ?",
+            [empId],
             function(err, res) {
                 if(err) throw err;
                 return manageEmployees();
