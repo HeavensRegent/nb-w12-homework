@@ -90,7 +90,7 @@ let cliOptions = {
             
             console.log('\nDepartments')
             for(i in result)
-                console.log(`Department ${(parseInt(i)+1)}: ${result[i].name}`);
+                console.log(`Department ${result[i].id}: ${result[i].name}`);
             
             manageEmployees();
 
@@ -139,25 +139,25 @@ let cliOptions = {
         questions: [{
             message: "Role Title",
             type: 'input',
-            name: 'name'
+            name: 'title'
         },
         {
             message: "Role Salary",
             type: 'input',
-            name: 'name'
+            name: 'salary'
         },
         {
             message: "Which department is this role in?",
             type: 'rawlist',
-            name: 'department',
+            name: 'departmentId',
             choices: async () => {
                 let departments = await callQuery(department.viewItems());
-                return departments.map(dep => {return {name: dep.name, value: dep}})
+                return departments.map(dep => {return {name: dep.name, value: dep.id}})
             }
         }],
-        execute: async (role) => {
-            console.log(role);
-            let result = await callQuery(role.createItem(role));
+        execute: async (newRole) => {
+            console.log(newRole);
+            let result = await callQuery(role.createItem(newRole));
 
             manageEmployees();
             return result;
@@ -165,16 +165,26 @@ let cliOptions = {
     },
     "View Roles": {
         questions: [],
+        execute: async () => {
+            let result = await callQuery(role.viewItems());
+            
+            console.log('\nRoles')
+            for(i in result)
+                console.log(`Role ${result[i].id}: ${result[i].title} Salary(${result[i].salary}) Dept:${result[i].department_id}`);
+            
+            manageEmployees();
+
+            return result;
+        },
     },
     "Update Role": {
-        questions: ["Role Title", "Role Salary", "Which department should this role be in?"],
         questions: [{
             message: "Which Role do you want to update?",
             type: 'rawlist',
             name: 'role',
             choices: async () => {
                 let roles = await callQuery(role.viewItems());
-                return roles.map(role => {return {name: role.name, value: role}})
+                return roles.map(role => {return {name: role.title, value: role}})
             }
         },
         {
@@ -195,18 +205,31 @@ let cliOptions = {
             name: 'departmentId',
             choices: async () => {
                 let departments = await callQuery(department.viewItems());
-                return departments.map(dep => {return {name: dep.name, value: dep}})
+                return departments.map(dep => {return {name: dep.name, value: dep.id}})
             },
             default: (answers) => answers.role.departmentId
         }],
-        execute: async (role) => {
-            let result = await callQuery(role.updateItem(role.role.id, role))
+        execute: async (updatedRole) => {
+            let result = await callQuery(role.updateItem(updatedRole.role.id, updatedRole))
             manageEmployees();
             return result;
         }
     },
     "Delete Role": {
-        questions: ["Which role do you want to delete?"],
+        questions: [{
+            message: "Which Role do you want to delete?",
+            type: 'rawlist',
+            name: 'roleId',
+            choices: async () => {
+                let roles = await callQuery(role.viewItems());
+                return roles.map(role => {return {name: role.title, value: role.id}})
+            }
+        }],
+        execute: async (deletingRole) => {
+            let result = await callQuery(role.deleteItem(deletingRole.roleId))
+            manageEmployees();
+            return result;
+        }
     },
     "Add Employee": {
         questions: ["First Name", "Last Name", "What role do they have?", "Who is their manager?"],
@@ -262,7 +285,7 @@ const department = {
 const role = {
     createItem(role) {
         return [
-            "INSERT INTO role (title, salary, department_id) VALUES (?)",
+            "INSERT INTO role (title, salary, department_id) VALUES (?, ?, ?)",
             [role.title, role.salary, role.departmentId]
         ]
     },
