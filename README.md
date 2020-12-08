@@ -6,6 +6,7 @@ Here you can manage Employees, the roles they play in a department and the depar
 
 ## Github Repo
 https://github.com/HeavensRegent/nb-w12-homework
+
 [View a demonstration of the CLI here](https://drive.google.com/file/d/1hZfjRUG6fXXyfBdntIEbhZxFD4cH1vnO/view)
 
 ## Table of Contents
