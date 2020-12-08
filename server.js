@@ -4,6 +4,7 @@ const util = require('util');
 
 let connection;
 
+//Start and setup the connection
 async function start() {
     connection = await mysql.createConnection({
         host: "localhost",
@@ -14,9 +15,8 @@ async function start() {
     });
     manageEmployees();
 }
-// // node native promisify
-// const query = util.promisify(connection.query).bind(connection);
 
+//Repeated method that will run many times
 async function manageEmployees() {
 
     let option = await prompt(optionQuestions);
@@ -33,6 +33,7 @@ async function manageEmployees() {
     }
 }
 
+//Beginning prompt questions
 let optionQuestions = [
     {
         type: 'list',
@@ -59,15 +60,71 @@ let optionQuestions = [
     }
 ];
 
+//Each of the cli options with their questions and the the method that should be ran when they are complete
 let cliOptions = {
     "Update Employee's Manager": {
-        questions: ["Which Employee do you want to update the Manager of?", "Who do you want the employee's new manager to be?"],
+        questions: [{
+            message: "Which Employee do you want to update the Manager of?",
+            type: 'rawlist',
+            name: 'employee',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp}})
+            }
+        },
+        {
+            message: "Who do you want the employee's new manager to be?",
+            type: 'rawlist',
+            name: 'managerId',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                employees.unshift({firstName: 'None', lastName: '', id: 0});
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp.id}})
+            },
+            default: (answers) => answers.employee.manager_id
+        }],
+        execute: async (emp) => {
+            let result = await callQuery(employee.updateManager(emp.employee.id, emp))
+            manageEmployees();
+            return result;
+        }
     },
     "View Manager's Employees": {
-        questions: ["Whos employees do you want to see?"],
+        questions: [{
+            message: "Whos employees do you want to see?",
+            type: 'rawlist',
+            name: 'managerId',
+            choices: async () => {
+                let employees = await callQuery(employee.viewItems());
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp.id}})
+            }
+        }],
+        execute: async (manager) => {
+            console.log(manager);
+            let result = await callQuery(employee.getEmployees(manager.managerId));
+
+            console.table(result.reduce((acc, {id, ...x}) => { acc[id] = x; return acc}, {}));
+
+            manageEmployees();
+            return result;
+        }
     },
     "View Department Budget": {
-        questions: ["What department do you want to see?"],
+        questions: [{
+            message: "Which Department do you want to see the budget for?",
+            type: 'rawlist',
+            name: 'department',
+            choices: async () => {
+                let departments = await callQuery(department.viewItems());
+                return departments.map(dep => {return {name: dep.name, value: dep}})
+            }
+        }],
+        execute: async (dep) => {
+            let result = await callQuery(department.viewBudget(dep.department.id))
+            console.log(result[0].budget);
+            manageEmployees();
+            return result;
+        }
     },
     "Add Department": {
         questions: [{
@@ -168,9 +225,7 @@ let cliOptions = {
         execute: async () => {
             let result = await callQuery(role.viewItems());
             
-            console.log('\nRoles')
-            for(i in result)
-                console.log(`Role ${result[i].id}: ${result[i].title} Salary(${result[i].salary}) Dept:${result[i].department_id}`);
+            console.table(result.reduce((acc, {id, ...x}) => { acc[id] = x; return acc}, {}));
             
             manageEmployees();
 
@@ -258,8 +313,8 @@ let cliOptions = {
             name: 'managerId',
             choices: async () => {
                 let employees = await callQuery(employee.viewItems());
-                employees.unshift({title: 'None', id: 0});
-                return employees.map(emp => {return {name: emp.title, value: emp.id}})
+                employees.unshift({firstName: 'None', lastName: '', id: 0});
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp.id}})
             }
         }],
         execute: async (emp) => {
@@ -274,11 +329,9 @@ let cliOptions = {
         questions: [],
         execute: async () => {
             let result = await callQuery(employee.viewItems());
-            
-            console.log('\nid\tFirst Name\tLast Name\tRole\tManager');
-            for(i in result)
-                console.log(`${result[i].id}\t${result[i].first_name}\t${result[i].last_name}\t${result[i].role_id}\t${result[i].manager_id}`);
-            
+
+            console.table(result.reduce((acc, {id, ...x}) => { acc[id] = x; return acc}, {}));
+
             manageEmployees();
 
             return result;
@@ -291,20 +344,20 @@ let cliOptions = {
             name: 'employee',
             choices: async () => {
                 let employees = await callQuery(employee.viewItems());
-                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp}})
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp}})
             }
         },
         {
             message: "First Name",
             type: 'input',
             name: 'firstName',
-            default: (answers) => answers.employee.first_name
+            default: (answers) => answers.employee.firstName
         },
         {
             message: "Last Name",
             type: 'input',
             name: 'lastName',
-            default: (answers) => answers.employee.last_name
+            default: (answers) => answers.employee.lastName
         },
         {
             message: "What role do they have?",
@@ -322,8 +375,8 @@ let cliOptions = {
             name: 'managerId',
             choices: async () => {
                 let employees = await callQuery(employee.viewItems());
-                employees.unshift({title: 'None', id: 0});
-                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp.id}})
+                employees.unshift({firstName: 'None', lastName:'', id: 0});
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp.id}})
             },
             default: (answers) => answers.employee.manager_id
         }],
@@ -340,7 +393,7 @@ let cliOptions = {
             name: 'employeeId',
             choices: async () => {
                 let employees = await callQuery(employee.viewItems());
-                return employees.map(emp => {return {name: `${emp.first_name} ${emp.last_name}`, value: emp.id}})
+                return employees.map(emp => {return {name: `${emp.firstName} ${emp.lastName}`, value: emp.id}})
             }
         }],
         execute: async (emp) => {
@@ -357,6 +410,7 @@ let cliOptions = {
     }
 }
 
+//Department query methods
 const department = {
     createItem(dept) {
         return [
@@ -386,8 +440,15 @@ const department = {
                 return manageEmployees();
             }
         ]
+    },
+    viewBudget(deptId) {
+        return [
+            "SELECT SUM(salary) as budget FROM department INNER JOIN role ON department.id = role.department_id WHERE department.id = ?",
+            [deptId]
+        ]
     }
 }
+//Role query methods
 const role = {
     createItem(role) {
         return [
@@ -396,7 +457,8 @@ const role = {
         ]
     },
     viewItems() {
-        return ["SELECT * FROM role ORDER BY id ASC"];
+        return [`SELECT role.id, title, salary, dept.name as departmentName FROM role 
+        INNER JOIN department dept ON role.department_id = dept.id ORDER BY role.id ASC`];
     },
     updateItem(roleId, {title, salary, departmentId}) {
         return [
@@ -419,6 +481,7 @@ const role = {
         ]
     }
 }
+//Employee query methods
 const employee = {
     createItem(emp) {
         return [
@@ -427,12 +490,30 @@ const employee = {
         ]
     },
     viewItems() {
-        return ["SELECT * FROM employee ORDER BY id ASC"];
+        return [`SELECT
+        e.id as id, e.first_name as firstName, e.last_name as lastName,
+        role.title as roleTitle, role.salary, dept.name as departmentTitle,
+       CONCAT(manager.first_name, ' ', manager.last_name) as manager
+ FROM employee as e
+     LEFT JOIN role ON e.role_id = role.id
+     LEFT JOIN department dept on role.department_id = dept.id
+     LEFT JOIN employee manager on e.manager_id = manager.id
+ ORDER BY e.first_name ASC`];
     },
     updateItem(empId, {firstName, lastName, roleId, managerId}) {
         return [
             "UPDATE employee SET first_name = ?, last_name = ?, role_id = ?, manager_id = ? WHERE id = ?",
             [firstName, lastName, roleId, managerId, empId],
+            function(err, res) {
+                if(err) throw err;
+                return manageEmployees();
+            }
+        ]
+    },
+    updateManager(empId, {managerId}) {
+        return [
+            "UPDATE employee SET manager_id = ? WHERE id = ?",
+            [managerId, empId],
             function(err, res) {
                 if(err) throw err;
                 return manageEmployees();
@@ -448,16 +529,26 @@ const employee = {
                 return manageEmployees();
             }
         ]
+    },
+    getEmployees(empId) {
+        return [
+            `SELECT e.id as id, e.first_name as firstName, e.last_name as lastName,
+            role.title as roleTitle, role.salary, dept.name as departmentTitle,
+            CONCAT(manager.first_name, ' ', manager.last_name) as manager
+            FROM employee as e
+            LEFT JOIN role ON e.role_id = role.id
+            LEFT JOIN department dept on role.department_id = dept.id
+            LEFT JOIN employee manager on e.manager_id = manager.id
+            WHERE e.manager_id = ? ORDER BY e.first_name ASC`,
+            [empId]
+        ]
     }
 }
 
+//Method that calls the query
 async function callQuery(queryObj) {
     let [rows, fields] = await connection.execute(...queryObj);
     return rows;
 }
 
 start();
-// connection.connect(err => {
-//     if(err) throw err;
-//     manageEmployees();
-// });
